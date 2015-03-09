@@ -8,16 +8,16 @@
 #include <process.h>
 #pragma comment ( lib, "Ws2_32.lib" )
 #include <WinSock2.h>
-#include <vector>
+#include <map>
 
 #define MAX_LOADSTRING 100
 
 #define WM_SOCKET WM_USER + 1
 
-#define BUF_SIZE    255
+#define BUF_SIZE    4096
 #define MAX_CLNT    100
-#define PORT        5001
-#define SOCKET_LIST std::vector<Socket_Info*>
+#define PORT        9001
+#define SOCKET_LIST std::map<SOCKET, Socket_Info*>
 
 
 struct Socket_Info
@@ -129,8 +129,6 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
         return FALSE;
     }
 
-    activeSocketList.reserve(100);
-
 
 	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_WIN32PROJECT1));
 
@@ -168,7 +166,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.hIcon			= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_WIN32PROJECT1));
 	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
 	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName	= MAKEINTRESOURCE(IDC_WIN32PROJECT1);
+    wcex.lpszMenuName   = NULL;
 	wcex.lpszClassName	= szWindowClass;
 	wcex.hIconSm		= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
@@ -276,8 +274,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 return 0;
             }
 
-            printf("클라이언트 접속");
-
             retValue = WSAAsyncSelect(client, hWnd, WM_SOCKET, FD_READ | FD_WRITE | FD_CLOSE);
             if (retValue == SOCKET_ERROR)
             {
@@ -323,6 +319,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case FD_WRITE:
         {
             Socket_Info* pSocketInfo = GetActiveSocketInfo(wParam);
+
+            if (pSocketInfo == NULL)
+            {
+                return 0;
+            }
+
             if (pSocketInfo->mSendBuffer <= 0)
             {
                 return 0;
@@ -384,7 +386,7 @@ BOOL AddActiveSocket(SOCKET client)
 
     Socket_Info* pSocketInfo = new Socket_Info(client);
 
-    activeSocketList.push_back(pSocketInfo);
+    activeSocketList[client] = pSocketInfo;
 
     return TRUE;
 }
@@ -397,29 +399,30 @@ void RemoveActiveSocket(SOCKET client)
 
     printf("클라이언트 종료\n");
 
-    auto sockInfo = activeSocketList.begin();
+    auto sockInfo = activeSocketList.find(client);
 
-    for (sockInfo = activeSocketList.begin(); sockInfo != activeSocketList.end(); ++sockInfo)
+    if (sockInfo != activeSocketList.end())
     {
-        if (client == (*sockInfo)->mSock)
-        {
-            break;
-        }
+        delete sockInfo->second;
+        sockInfo->second = nullptr;
+        activeSocketList.erase(sockInfo);
     }
-
-    activeSocketList.erase(sockInfo);
     return;
 }
 
 Socket_Info* GetActiveSocketInfo(SOCKET client)
 {
-    for (auto sockInfo : activeSocketList)
+    auto sockInfo = activeSocketList.find(client);
+
+    if (sockInfo != activeSocketList.end())
     {
-        if (client == sockInfo->mSock)
-        {
-            return sockInfo;
-        }
+        return sockInfo->second;
     }
 
     return NULL;
+}
+
+void ErrQuit(char* msg)
+{
+    
 }
